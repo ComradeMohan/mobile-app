@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student Profile</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-r from-blue-200 to-cyan-300 min-h-screen flex items-center justify-center">
+  <div class="bg-white shadow-2xl rounded-xl p-10 w-full max-w-md text-center">
+    <h2 class="text-3xl font-bold text-blue-700 mb-6">Welcome, {{ profile.name }}</h2>
+
+    <div class="text-left space-y-4 text-gray-700">
+      <p><span class="font-semibold">📄 Reg No:</span> {{ profile.regno }}</p>
+      <p><span class="font-semibold">🎂 DOB:</span> {{ profile.dob }}</p>
+      <p><span class="font-semibold">🎓 Program:</span> {{ profile.program }}</p>
+      <p><span class="font-semibold">✉️ Email:</span> {{ profile.email }}</p>
+      <p><span class="font-semibold">📞 Mobile:</span> {{ profile.mobile }}</p>
+    </div>
+<br>
+  <form action="{{ url_for('logout') }}" method="get">
+        <button type="submit">Logout</button>
+    </form>
+        <div class="mt-6">
+      <a href="/" class="text-blue-500 hover:underline">Logout</a>
+    </div>
+  </div>
+  
+</body>
+</html>
