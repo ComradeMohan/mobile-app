@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from scraper import ARMSClient
 import secrets
+import os
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)  # secure random key for sessions
@@ -38,6 +39,6 @@ def logout():
     session.pop('profile', None)
     return redirect(url_for('login'))
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 10000))
+    app.run(debug=False, host='0.0.0.0', port=port)
