@@ -5,8 +5,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-from bs4 import BeautifulSoup
 import time
+
 
 class ARMSClient:
     def __init__(self):
@@ -24,21 +24,21 @@ class ARMSClient:
 
     def fetch_profile(self, username, password):
         try:
-            wait = WebDriverWait(self.driver, 15)
+            wait = WebDriverWait(self.driver, 20)
 
             # LOGIN
             self.driver.get("https://arms.sse.saveetha.com/Login.aspx")
             self.driver.find_element(By.ID, "txtusername").send_keys(username)
             self.driver.find_element(By.ID, "txtpassword").send_keys(password)
             self.driver.find_element(By.ID, "btnlogin").click()
-            time.sleep(2)
 
-            if "Login" in self.driver.title:
-                return {"error": "Invalid credentials"}
+            # Wait for login success (redirect)
+            wait.until(lambda d: "Login" not in d.title)
+            profile_data = {}
 
             # PROFILE
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/DataProfile.aspx")
-            time.sleep(2)
+            wait.until(EC.presence_of_element_located((By.ID, "dvname")))
 
             def safe(id_):
                 try:
@@ -46,44 +46,39 @@ class ARMSClient:
                 except:
                     return "Not Found"
 
-            profile_data = {
+            profile_data.update({
                 "name": safe("dvname"),
                 "regno": safe("dvregno"),
                 "dob": safe("dvdob"),
                 "program": safe("dvprogram"),
                 "email": safe("dvemail"),
                 "mobile": safe("dvmobile"),
-            }
+            })
 
             # NOTIFICATIONS
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/Landing.aspx")
+            notifications = []
             try:
                 wait.until(EC.presence_of_element_located((By.ID, "ullpushnotification")))
-                time.sleep(2)
+                ul = self.driver.find_element(By.ID, "ullpushnotification")
+                li_items = ul.find_elements(By.TAG_NAME, "li")
 
-                html = self.driver.page_source
-                soup = BeautifulSoup(html, 'html.parser')
-                ul = soup.find("ul", id="ullpushnotification")
-
-                notifications = []
-                if ul:
-                    items = ul.find_all("li")
-                    for li in items:
-                        name_tag = li.find("a", class_="name")
-                        datetime_tag = li.find("span", class_="datetime")
-                        body_tag = li.find("span", class_="body")
-
-                        name = name_tag.get_text(strip=True) if name_tag else "Unknown"
-                        datetime = datetime_tag.get_text(strip=True) if datetime_tag else "Unknown date"
-                        body = body_tag.get_text(" ", strip=True) if body_tag else "No message"
-
+                for li in li_items:
+                    try:
+                        name = li.find_element(By.CLASS_NAME, "name").text.strip()
+                        datetime = li.find_element(By.CLASS_NAME, "datetime").text.strip()
+                        body = li.find_element(By.CLASS_NAME, "body").text.strip()
                         notifications.append({
                             "by": name,
                             "datetime": datetime,
                             "message": body
                         })
-                else:
+                    except:
+                        continue
+
+                if not notifications:
                     notifications.append({"message": "No notifications found"})
+
             except Exception as e:
                 notifications = [{"error": f"Failed to fetch notifications: {str(e)}"}]
 
@@ -91,7 +86,7 @@ class ARMSClient:
 
             # RESULTS + CGPA
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/MyCourse.aspx")
-            time.sleep(2)
+            wait.until(EC.presence_of_element_located((By.ID, "tblGridViewComplete")))
 
             courses = []
             total_points = 0
@@ -99,30 +94,27 @@ class ARMSClient:
             grade_points = {'S': 10, 'A': 9, 'B': 8, 'C': 7, 'D': 6, 'E': 5}
 
             try:
-                html = self.driver.page_source
-                soup = BeautifulSoup(html, 'html.parser')
-                table = soup.find("table", {"id": "tblGridViewComplete"})
-                if table:
-                    rows = table.find("tbody").find_all("tr")
-                    for row in rows:
-                        cols = row.find_all("td")
-                        if len(cols) >= 6:
-                            grade = cols[3].text.strip().upper()
-                            status = cols[4].text.strip().upper()
-                            if status == "FAIL":
-                                continue
-                            course = {
-                                "sno": cols[0].text.strip(),
-                                "code": cols[1].text.strip(),
-                                "name": cols[2].text.strip(),
-                                "grade": grade,
-                                "status": status,
-                                "month_year": cols[5].text.strip()
-                            }
-                            if grade in grade_points:
-                                total_points += grade_points[grade]
-                                total_credits += 1
-                            courses.append(course)
+                rows = self.driver.find_elements(By.CSS_SELECTOR, "#tblGridViewComplete tbody tr")
+                for row in rows:
+                    cols = row.find_elements(By.TAG_NAME, "td")
+                    if len(cols) >= 6:
+                        grade = cols[3].text.strip().upper()
+                        status = cols[4].text.strip().upper()
+                        if status == "FAIL":
+                            continue
+                        course = {
+                            "sno": cols[0].text.strip(),
+                            "code": cols[1].text.strip(),
+                            "name": cols[2].text.strip(),
+                            "grade": grade,
+                            "status": status,
+                            "month_year": cols[5].text.strip()
+                        }
+                        if grade in grade_points:
+                            total_points += grade_points[grade]
+                            total_credits += 1
+                        courses.append(course)
+
             except Exception as e:
                 courses.append({"error": f"Failed to scrape course data: {str(e)}"})
 
@@ -131,17 +123,12 @@ class ARMSClient:
 
             # ATTENDANCE
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/AttendanceReport.aspx")
+            attendance = []
             try:
                 wait.until(EC.presence_of_element_located((By.ID, "tblStudent")))
-                time.sleep(2)
-                html = self.driver.page_source
-                soup = BeautifulSoup(html, "html.parser")
-                table = soup.find("table", id="tblStudent")
-                rows = table.find("tbody").find_all("tr")
-
-                attendance = []
+                rows = self.driver.find_elements(By.CSS_SELECTOR, "#tblStudent tbody tr")
                 for row in rows:
-                    cols = row.find_all("td")
+                    cols = row.find_elements(By.TAG_NAME, "td")
                     if len(cols) >= 9:
                         attendance.append({
                             "sno": cols[0].text.strip(),
@@ -151,12 +138,13 @@ class ARMSClient:
                             "hours_attended": cols[4].text.strip(),
                             "total_class": cols[5].text.strip(),
                             "total_hours": cols[6].text.strip(),
-                            "percentage": cols[7].text.strip().replace("label", "").strip(),
+                            "percentage": cols[7].text.strip(),
                             "view": cols[8].text.strip(),
                         })
-                profile_data["attendance"] = attendance
             except Exception as e:
-                profile_data["attendance"] = [{"error": f"Failed to fetch attendance: {str(e)}"}]
+                attendance = [{"error": f"Failed to fetch attendance: {str(e)}"}]
+
+            profile_data["attendance"] = attendance
 
             return profile_data
 
