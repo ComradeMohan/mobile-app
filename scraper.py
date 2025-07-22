@@ -4,7 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
 import time
 import logging
@@ -37,23 +37,22 @@ class ARMSClient:
             logger.info("🔐 Logging in...")
 
             self.driver.get("https://arms.sse.saveetha.com/Login.aspx")
-            wait = WebDriverWait(self.driver, 10)
+            wait = WebDriverWait(self.driver, 15)
 
             wait.until(EC.presence_of_element_located((By.ID, "txtusername"))).send_keys(username)
             self.driver.find_element(By.ID, "txtpassword").send_keys(password)
             self.driver.find_element(By.ID, "btnlogin").click()
-            time.sleep(3)
+            time.sleep(2)
 
             if "Login" in self.driver.title:
                 return {"error": "Invalid credentials"}
 
             profile_data = {}
-            wait = WebDriverWait(self.driver, 10)
 
-            # Profile Info
+            # 🎓 Profile Info
             logger.info("📄 Fetching profile info...")
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/DataProfile.aspx")
-            time.sleep(2)
+            time.sleep(1)
 
             def safe(id_):
                 try:
@@ -70,18 +69,16 @@ class ARMSClient:
                 "mobile": safe("dvmobile"),
             }
 
-            # Notifications
+            # 🔔 Notifications
             logger.info("🔔 Fetching notifications...")
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/Home.aspx")
-            try:
-                wait.until(EC.presence_of_element_located((By.ID, "ullpushnotification")))
-            except:
-                pass
+            time.sleep(1)
 
             notifications = []
             try:
+                WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, "ullpushnotification")))
                 ul = self.driver.find_element(By.ID, "ullpushnotification")
-                items = ul.find_elements(By.TAG_NAME, "li")
+                items = ul.find_elements(By.TAG_NAME, "li")[:3]  # limit to top 3
                 for item in items:
                     try:
                         notifications.append({
@@ -89,15 +86,15 @@ class ARMSClient:
                             "datetime": item.find_element(By.CLASS_NAME, "datetime").text.strip(),
                             "message": item.find_element(By.CLASS_NAME, "body").text.strip()
                         })
-                    except Exception as e:
-                        notifications.append({"message": f"Failed to parse: {str(e)}"})
+                    except:
+                        continue
             except:
                 notifications.append({"message": "No notifications found"})
 
             profile_data["notifications"] = notifications
 
-            # My Courses + CGPA
-            logger.info("🎓 Fetching course results and calculating CGPA...")
+            # 📚 Courses & CGPA
+            logger.info("📘 Fetching courses and CGPA...")
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/MyCourse.aspx")
             time.sleep(2)
 
@@ -117,40 +114,33 @@ class ARMSClient:
                     if len(cols) >= 6:
                         grade = cols[3].text.strip().upper()
                         status = cols[4].text.strip().upper()
-
                         if status == "FAIL":
                             continue
+                        if grade in grade_points:
+                            total_points += grade_points[grade]
+                            total_credits += 1
 
-                        course = {
+                        courses.append({
                             "sno": cols[0].text.strip(),
                             "code": cols[1].text.strip(),
                             "name": cols[2].text.strip(),
                             "grade": grade,
                             "status": status,
                             "month_year": cols[5].text.strip()
-                        }
-
-                        if grade in grade_points:
-                            total_points += grade_points[grade]
-                            total_credits += 1
-
-                        courses.append(course)
+                        })
 
             profile_data["courses"] = courses
             profile_data["cgpa"] = round(total_points / total_credits, 2) if total_credits else "N/A"
 
-            # Attendance
-            logger.info("📊 Fetching attendance...")
+            # 📊 Attendance
+            logger.info("📊 Fetching attendance data...")
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/AttendanceReport.aspx")
-            time.sleep(3)
-            attendance = []
+            time.sleep(2)
 
+            attendance = []
             try:
-                WebDriverWait(self.driver, 10).until(
-                    lambda d: len(d.find_elements(By.XPATH, "//table[@id='gvAttendanceReport']//tr")) > 1
-                )
-                page = self.driver.page_source
-                soup = BeautifulSoup(page, 'html.parser')
+                html = self.driver.page_source
+                soup = BeautifulSoup(html, 'html.parser')
                 table = soup.find("table", {"id": "gvAttendanceReport"})
                 if table:
                     rows = table.find_all("tr")[1:]
@@ -164,10 +154,10 @@ class ARMSClient:
                                 "total_classes": cols[3].text.strip(),
                                 "attended": cols[4].text.strip(),
                                 "percentage": cols[5].text.strip(),
-                                "status": cols[6].text.strip(),
+                                "status": cols[6].text.strip()
                             })
             except Exception as e:
-                attendance.append({"error": f"Attendance fetch failed: {str(e)}"})
+                attendance.append({"error": f"Attendance error: {str(e)}"})
 
             profile_data["attendance"] = attendance
 
@@ -175,12 +165,12 @@ class ARMSClient:
             return profile_data
 
         except Exception as e:
-            logger.error(f"❌ Error during profile fetch: {e}")
+            logger.error(f"❌ Error fetching profile: {e}")
             return {"error": str(e)}
 
         finally:
             try:
                 self.driver.quit()
-                logger.info("🛑 WebDriver closed.")
+                logger.info("🛑 Driver closed.")
             except Exception as e:
-                logger.warning(f"⚠️ Error closing WebDriver: {e}")
+                logger.warning(f"⚠️ WebDriver close failed: {e}")
