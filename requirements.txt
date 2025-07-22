@@ -3,3 +3,4 @@ selenium
 webdriver-manager
 gunicorn==21.2.0
 Werkzeug==2.3.7
+bs4
