@@ -1,11 +1,15 @@
 # render.yaml
 services:
   - type: web
-    name: arms-web
+    name: flask-arms-app
     env: docker
-    plan: free
+    dockerfilePath: ./Dockerfile
+    plan: starter
     region: oregon
     branch: main
-    repo: https://github.com/yourusername/arms-web
-    dockerContext: .
-    autoDeploy: true
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
