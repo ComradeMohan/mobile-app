@@ -4,41 +4,56 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from bs4 import BeautifulSoup
 import time
+import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class ARMSClient:
     def __init__(self):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--window-size=1920x1080")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.binary_location = "/usr/bin/chromium"
 
-        self.driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
+        try:
+            service = Service("/usr/bin/chromedriver")
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            self.driver.set_page_load_timeout(30)
+            logger.info("✅ Chrome WebDriver initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize WebDriver: {e}")
+            raise
 
     def fetch_profile(self, username, password):
         try:
-            wait = WebDriverWait(self.driver, 20)
+            logger.info("🔐 Logging in...")
 
-            # LOGIN
             self.driver.get("https://arms.sse.saveetha.com/Login.aspx")
-            self.driver.find_element(By.ID, "txtusername").send_keys(username)
+            wait = WebDriverWait(self.driver, 10)
+
+            wait.until(EC.presence_of_element_located((By.ID, "txtusername"))).send_keys(username)
             self.driver.find_element(By.ID, "txtpassword").send_keys(password)
             self.driver.find_element(By.ID, "btnlogin").click()
+            time.sleep(3)
 
-            # Wait for login success (redirect)
-            wait.until(lambda d: "Login" not in d.title)
+            if "Login" in self.driver.title:
+                return {"error": "Invalid credentials"}
+
             profile_data = {}
+            wait = WebDriverWait(self.driver, 10)
 
-            # PROFILE
+            # Profile Info
+            logger.info("📄 Fetching profile info...")
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/DataProfile.aspx")
-            wait.until(EC.presence_of_element_located((By.ID, "dvname")))
+            time.sleep(2)
 
             def safe(id_):
                 try:
@@ -46,62 +61,66 @@ class ARMSClient:
                 except:
                     return "Not Found"
 
-            profile_data.update({
+            profile_data = {
                 "name": safe("dvname"),
                 "regno": safe("dvregno"),
                 "dob": safe("dvdob"),
                 "program": safe("dvprogram"),
                 "email": safe("dvemail"),
                 "mobile": safe("dvmobile"),
-            })
+            }
 
-            # NOTIFICATIONS
-            self.driver.get("https://arms.sse.saveetha.com/StudentPortal/Landing.aspx")
-            notifications = []
+            # Notifications
+            logger.info("🔔 Fetching notifications...")
+            self.driver.get("https://arms.sse.saveetha.com/StudentPortal/Home.aspx")
             try:
                 wait.until(EC.presence_of_element_located((By.ID, "ullpushnotification")))
+            except:
+                pass
+
+            notifications = []
+            try:
                 ul = self.driver.find_element(By.ID, "ullpushnotification")
-                li_items = ul.find_elements(By.TAG_NAME, "li")
-
-                for li in li_items:
+                items = ul.find_elements(By.TAG_NAME, "li")
+                for item in items:
                     try:
-                        name = li.find_element(By.CLASS_NAME, "name").text.strip()
-                        datetime = li.find_element(By.CLASS_NAME, "datetime").text.strip()
-                        body = li.find_element(By.CLASS_NAME, "body").text.strip()
                         notifications.append({
-                            "by": name,
-                            "datetime": datetime,
-                            "message": body
+                            "by": item.find_element(By.CLASS_NAME, "name").text.strip(),
+                            "datetime": item.find_element(By.CLASS_NAME, "datetime").text.strip(),
+                            "message": item.find_element(By.CLASS_NAME, "body").text.strip()
                         })
-                    except:
-                        continue
-
-                if not notifications:
-                    notifications.append({"message": "No notifications found"})
-
-            except Exception as e:
-                notifications = [{"error": f"Failed to fetch notifications: {str(e)}"}]
+                    except Exception as e:
+                        notifications.append({"message": f"Failed to parse: {str(e)}"})
+            except:
+                notifications.append({"message": "No notifications found"})
 
             profile_data["notifications"] = notifications
 
-            # RESULTS + CGPA
+            # My Courses + CGPA
+            logger.info("🎓 Fetching course results and calculating CGPA...")
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/MyCourse.aspx")
-            wait.until(EC.presence_of_element_located((By.ID, "tblGridViewComplete")))
+            time.sleep(2)
+
+            html = self.driver.page_source
+            soup = BeautifulSoup(html, 'html.parser')
+            table = soup.find("table", {"id": "tblGridViewComplete"})
 
             courses = []
             total_points = 0
             total_credits = 0
             grade_points = {'S': 10, 'A': 9, 'B': 8, 'C': 7, 'D': 6, 'E': 5}
 
-            try:
-                rows = self.driver.find_elements(By.CSS_SELECTOR, "#tblGridViewComplete tbody tr")
+            if table:
+                rows = table.find("tbody").find_all("tr")
                 for row in rows:
-                    cols = row.find_elements(By.TAG_NAME, "td")
+                    cols = row.find_all("td")
                     if len(cols) >= 6:
                         grade = cols[3].text.strip().upper()
                         status = cols[4].text.strip().upper()
+
                         if status == "FAIL":
                             continue
+
                         course = {
                             "sno": cols[0].text.strip(),
                             "code": cols[1].text.strip(),
@@ -110,46 +129,58 @@ class ARMSClient:
                             "status": status,
                             "month_year": cols[5].text.strip()
                         }
+
                         if grade in grade_points:
                             total_points += grade_points[grade]
                             total_credits += 1
+
                         courses.append(course)
 
-            except Exception as e:
-                courses.append({"error": f"Failed to scrape course data: {str(e)}"})
-
             profile_data["courses"] = courses
-            profile_data["cgpa"] = round(total_points / total_credits, 2) if total_credits > 0 else "N/A"
+            profile_data["cgpa"] = round(total_points / total_credits, 2) if total_credits else "N/A"
 
-            # ATTENDANCE
+            # Attendance
+            logger.info("📊 Fetching attendance...")
             self.driver.get("https://arms.sse.saveetha.com/StudentPortal/AttendanceReport.aspx")
+            time.sleep(3)
             attendance = []
+
             try:
-                wait.until(EC.presence_of_element_located((By.ID, "tblStudent")))
-                rows = self.driver.find_elements(By.CSS_SELECTOR, "#tblStudent tbody tr")
-                for row in rows:
-                    cols = row.find_elements(By.TAG_NAME, "td")
-                    if len(cols) >= 9:
-                        attendance.append({
-                            "sno": cols[0].text.strip(),
-                            "code": cols[1].text.strip(),
-                            "name": cols[2].text.strip(),
-                            "class_attended": cols[3].text.strip(),
-                            "hours_attended": cols[4].text.strip(),
-                            "total_class": cols[5].text.strip(),
-                            "total_hours": cols[6].text.strip(),
-                            "percentage": cols[7].text.strip(),
-                            "view": cols[8].text.strip(),
-                        })
+                WebDriverWait(self.driver, 10).until(
+                    lambda d: len(d.find_elements(By.XPATH, "//table[@id='gvAttendanceReport']//tr")) > 1
+                )
+                page = self.driver.page_source
+                soup = BeautifulSoup(page, 'html.parser')
+                table = soup.find("table", {"id": "gvAttendanceReport"})
+                if table:
+                    rows = table.find_all("tr")[1:]
+                    for row in rows:
+                        cols = row.find_all("td")
+                        if len(cols) >= 7:
+                            attendance.append({
+                                "code": cols[0].text.strip(),
+                                "name": cols[1].text.strip(),
+                                "type": cols[2].text.strip(),
+                                "total_classes": cols[3].text.strip(),
+                                "attended": cols[4].text.strip(),
+                                "percentage": cols[5].text.strip(),
+                                "status": cols[6].text.strip(),
+                            })
             except Exception as e:
-                attendance = [{"error": f"Failed to fetch attendance: {str(e)}"}]
+                attendance.append({"error": f"Attendance fetch failed: {str(e)}"})
 
             profile_data["attendance"] = attendance
 
+            logger.info("✅ Profile fetch complete.")
             return profile_data
 
         except Exception as e:
+            logger.error(f"❌ Error during profile fetch: {e}")
             return {"error": str(e)}
 
         finally:
-            self.driver.quit()
+            try:
+                self.driver.quit()
+                logger.info("🛑 WebDriver closed.")
+            except Exception as e:
+                logger.warning(f"⚠️ Error closing WebDriver: {e}")
