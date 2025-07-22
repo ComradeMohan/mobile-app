@@ -341,7 +341,7 @@
                           {% endif %}
                         </td>
                         <td>
-                          {% set current_classes = att.total_class|int %}
+                          {% set current_classes = att.total_class|default('0')|int %}
                           {% set attended_classes = (current_classes * percentage / 100)|int %}
                           {% if percentage >= 80 %}
                             {% set future_total = current_classes + 10 %}
