@@ -7,25 +7,114 @@
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gradient-to-r from-blue-200 to-cyan-300 min-h-screen flex items-center justify-center">
-  <div class="bg-white shadow-2xl rounded-xl p-10 w-full max-w-md text-center">
-    <h2 class="text-3xl font-bold text-blue-700 mb-6">Welcome, {{ profile.name }}</h2>
+<body class="bg-gradient-to-r from-blue-200 to-cyan-300 min-h-screen py-10">
+  <div class="max-w-3xl mx-auto bg-white shadow-2xl rounded-xl p-8">
+    <h2 class="text-3xl font-bold text-blue-700 mb-6 text-center">Welcome, {{ profile.name }}</h2>
 
-    <div class="text-left space-y-4 text-gray-700">
+    <!-- Profile Info -->
+    <div class="grid md:grid-cols-2 gap-4 text-gray-700 text-sm md:text-base">
       <p><span class="font-semibold">📄 Reg No:</span> {{ profile.regno }}</p>
       <p><span class="font-semibold">🎂 DOB:</span> {{ profile.dob }}</p>
       <p><span class="font-semibold">🎓 Program:</span> {{ profile.program }}</p>
       <p><span class="font-semibold">✉️ Email:</span> {{ profile.email }}</p>
       <p><span class="font-semibold">📞 Mobile:</span> {{ profile.mobile }}</p>
+      <!-- Profile Box (continued) -->
+<p><span class="font-semibold">📊 CGPA:</span> {{ profile.cgpa }}</p>
+
     </div>
-<br>
-  <form action="{{ url_for('logout') }}" method="get">
-        <button type="submit">Logout</button>
-    </form>
-        <div class="mt-6">
-      <a href="/" class="text-blue-500 hover:underline">Logout</a>
+
+    <!-- Logout -->
+    <div class="mt-8 text-center">
+      <form action="{{ url_for('logout') }}" method="get">
+        <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">Logout</button>
+      </form>
     </div>
   </div>
-  
+
+  <!-- Notifications -->
+  <!-- <div class="max-w-3xl mx-auto mt-10 bg-white shadow-xl rounded-xl p-6">
+    <h3 class="text-2xl font-semibold text-gray-800 mb-4">🔔 Notifications</h3>
+
+    {% if profile.notifications %}
+      <ul class="space-y-4">
+        {% for note in profile.notifications %}
+          <li class="bg-gray-50 border border-gray-200 p-4 rounded-lg shadow-sm">
+            <div class="text-sm text-gray-600 mb-1">
+              <strong class="text-blue-700">{{ note.by }}</strong> 
+              <span class="text-gray-500 italic">({{ note.datetime }})</span>
+            </div>
+            <div class="text-gray-800 text-sm whitespace-pre-wrap">{{ note.message }}</div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-gray-600">No notifications available.</p>
+    {% endif %}
+  </div> -->
+  <!-- Courses -->
+<!-- Completed Courses -->
+<div class="max-w-3xl mx-auto mt-10 bg-white shadow-xl rounded-xl p-6">
+  <h3 class="text-2xl font-semibold text-gray-800 mb-4">📚 Completed Courses</h3>
+  {% if profile.courses %}
+    <div class="overflow-x-auto">
+      <table class="min-w-full table-auto text-sm">
+        <thead>
+          <tr class="bg-blue-100 text-blue-800 font-semibold">
+            <th class="px-4 py-2 text-left">Code</th>
+            <th class="px-4 py-2 text-left">Name</th>
+            <th class="px-4 py-2 text-left">Grade</th>
+            <th class="px-4 py-2 text-left">Month & Year</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for course in profile.courses %}
+            <tr class="border-b">
+              <td class="px-4 py-2">{{ course.code }}</td>
+              <td class="px-4 py-2">{{ course.name }}</td>
+              <td class="px-4 py-2">{{ course.grade }}</td>
+              <td class="px-4 py-2">{{ course.month_year }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-gray-600">No courses available.</p>
+  {% endif %}
+</div>
+
+
+ <!-- <div class="max-w-3xl mx-auto mt-10 bg-white shadow-xl rounded-xl p-6">
+    <h3 class="text-2xl font-semibold text-gray-800 mb-4">🗓️ Attendance Summary</h3>
+    {% if profile.attendance %}
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-auto text-sm">
+          <thead>
+            <tr class="bg-green-100 text-green-800 font-semibold">
+              <th class="px-4 py-2 text-left">Code</th>
+              <th class="px-4 py-2 text-left">Name</th>
+              <th class="px-4 py-2 text-left">Class</th>
+              <th class="px-4 py-2 text-left">Hour</th>
+              <th class="px-4 py-2 text-left">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for att in profile.attendance %}
+              <tr class="border-b">
+                <td class="px-4 py-2">{{ att.code }}</td>
+                <td class="px-4 py-2">{{ att.name }}</td>
+                <td class="px-4 py-2">{{ att.class }}</td>
+                <td class="px-4 py-2">{{ att.hour }}</td>
+                <td class="px-4 py-2">{{ att.percentage }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-gray-600">No attendance data available.</p>
+    {% endif %}
+  </div> -->
+
 </body>
 </html>
